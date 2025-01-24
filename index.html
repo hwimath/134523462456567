@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>나눗셈 문장제(다리수, 생산속도, 역연산)</title>
+  <!-- MathJax 로드 -->
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" defer></script>
+  <style>
+    body {
+      background-color: #fff;
+      color: #000;
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    h1, h2, h3 {
+      margin: 0.5em 0;
+    }
+    .hidden { display: none; }
+    .energy-bar {
+      width: 100%;
+      height: 20px;
+      background-color: #000;
+      margin-bottom: 1em;
+    }
+    .energy-fill {
+      height: 100%;
+      background-color: #fff;
+      width: 100%; /* 시작은 가득 차 있음 */
+      transition: width 0.2s linear;
+    }
+    .choice-container input {
+      margin-right: 5px;
+    }
+    #response {
+      white-space: pre-wrap;
+      border: 1px solid #ccc;
+      padding: 8px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>나눗셈 문장제(다리수, 생산속도, 역연산)</h1>
+
+<!-- 난이도/이름/시작 화면 -->
+<div id="startScreen">
+  <p>이름을 입력하세요:</p>
+  <input type="text" id="playerName" placeholder="플레이어 이름" />
+  
+  <p>난이도를 선택하세요:</p>
+  <select id="difficultySelect">
+    <option value="highest">최상 (20초/문제, 정답 시 20점)</option>
+    <option value="high">상 (30초/문제, 정답 시 15점)</option>
+    <option value="mid">중 (40초/문제, 정답 시 13점)</option>
+    <option value="low">하 (시간제한 없음, 정답 시 10점)</option>
+  </select>
+  <br /><br />
+  <button onclick="startGame()">게임 시작</button>
+</div>
+
+<!-- 메인 게임 화면 -->
+<div id="gameScreen" class="hidden">
+  <h2 id="scoreDisplay">점수: 0</h2>
+  <h3 id="chanceDisplay">남은 기회: 3</h3>
+  <div>전체 진행 시간: <span id="totalTime">0</span>초</div>
+  <div id="energyContainer" class="energy-bar">
+    <div id="energyFill" class="energy-fill"></div>
+  </div>
+  
+  <div id="questionArea">
+    <!-- 문제와 보기 표시 -->
+    <div id="questionText"></div>
+    <div id="choices"></div>
+    <button onclick="submitAnswer()">제출</button>
+  </div>
+</div>
+
+<!-- 게임 종료 화면 -->
+<div id="endScreen" class="hidden">
+  <h2>게임 종료!</h2>
+  <p id="finalScore"></p>
+  <button onclick="sendScore()">점수전송</button>
+  <div id="response"></div>
+</div>
+
+<script>
+// =============================================
+// 0. MathJax 설정(기본 스크립트는 head에 이미 선언)
+//    문제 표시 후에는 MathJax.typeset()으로 렌더링
+// =============================================
+
+// =============================================
+// 1. 문제 데이터
+//    (사진에 나온 (b), (f), (e)는 제외하고,
+//     나머지 모든 문제를 하나도 빠짐없이 포함)
+// =============================================
+
+// 1) 첫 유형(사탕 나누기: 3지선다) - 총 8문제
+//   (b), (f) 제외하고 (a), (c), (d), (e), (g), (h), (i), (j)
+const cat1 = [
+  {
+    question: `한별이네 모둠 6명이 사탕 24개를 똑같이 나누고,<br>
+               다연이네 모둠 4명이 사탕 20개를 똑같이 나누어 가집니다.<br>
+               어느 모둠이 1인당 사탕을 더 많이 갖게 될까요?`,
+    choices: ["한별이네", "다연이네", "같음"],
+    correctIndex: 1  // "다연이네"
+  },
+  {
+    question: `예진이네 모둠 5명이 사탕 25개를 나누고,<br>
+               민서네 모둠 7명이 사탕 35개를 나누어 가집니다.<br>
+               어느 모둠이 1인당 사탕을 더 많이 갖게 될까요?`,
+    choices: ["예진이네", "민서네", "같음"],
+    correctIndex: 2 // "같음"
+  },
+  {
+    question: `지안이네 모둠 8명이 사탕 48개를 나누고,<br>
+               도현이네 모둠 6명이 사탕 30개를 나누어 가집니다.<br>
+               어느 모둠이 1인당 사탕을 더 많이 갖게 될까요?`,
+    choices: ["지안이네", "도현이네", "같음"],
+    correctIndex: 0 // "지안이네"
+  },
+  {
+    question: `나연이네 모둠 10명이 사탕 50개를 나누고,<br>
+               서윤이네 모둠 5명이 사탕 25개를 나누어 가집니다.<br>
+               어느 모둠이 1인당 사탕을 더 많이 갖게 될까요?`,
+    choices: ["나연이네", "서윤이네", "같음"],
+    correctIndex: 2 // "같음"
+  },
+  {
+    question: `시우네 모둠 8명이 사탕 32개를 나누고,<br>
+               주원이네 모둠 4명이 사탕 16개를 나누어 가집니다.<br>
+               어느 모둠이 1인당 사탕을 더 많이 갖게 될까요?`,
+    choices: ["시우네", "주원이네", "같음"],
+    correctIndex: 2 // "같음"
+  },
+  {
+    question: `하린이네 모둠 5명이 사탕 35개를 나누고,<br>
+               서진이네 모둠 7명이 사탕 42개를 나누어 가집니다.<br>
+               어느 모둠이 1인당 사탕을 더 많이 갖게 될까요?`,
+    choices: ["하린이네", "서진이네", "같음"],
+    correctIndex: 0 // "하린이네"
+  },
+  {
+    question: `이준이네 모둠 3명이 사탕 15개를 나누고,<br>
+               서영이네 모둠 5명이 사탕 20개를 나누어 가집니다.<br>
+               어느 모둠이 1인당 사탕을 더 많이 갖게 될까요?`,
+    choices: ["이준이네", "서영이네", "같음"],
+    correctIndex: 0 // "이준이네"
+  },
+  {
+    question: `연서네 모둠 6명이 사탕 36개를 나누고,<br>
+               효주네 모둠 9명이 사탕 45개를 나누어 가집니다.<br>
+               어느 모둠이 1인당 사탕을 더 많이 갖게 될까요?`,
+    choices: ["연서네", "효주네", "같음"],
+    correctIndex: 0 // "연서네"
+  }
+];
+
+// 2) 두 번째 유형(생산 속도: 4지선다) - 총 9문제
+//   (e) 제외: 즉 (a), (b), (c), (d), (f), (g), (h), (i), (j)
+const cat2 = [
+  {
+    question: `똑같은 기계 3대가 1시간 동안 펜 18개를 만든다면,<br>
+               기계 1대가 펜 36개를 만드는 데 걸리는 시간은 몇 시간일까요?`,
+    choices: ["4시간","5시간","6시간","8시간"],
+    correctIndex: 2 // 6시간
+  },
+  {
+    question: `똑같은 기계 4대가 1시간에 장난감 자동차 20개를 만든다면,<br>
+               기계 2대가 40개를 만드는 데 걸리는 시간은 몇 시간일까요?`,
+    choices: ["2시간","3시간","4시간","5시간"],
+    correctIndex: 2 // 4시간
+  },
+  {
+    question: `똑같은 기계 5대가 1시간에 빵 25개를 만든다면,<br>
+               기계 1대가 50개를 만드는 데 걸리는 시간은 몇 시간일까요?`,
+    choices: ["5시간","8시간","10시간","12시간"],
+    correctIndex: 2 // 10시간
+  },
+  {
+    question: `똑같은 기계 2대가 2시간에 의자를 16개 만든다면,<br>
+               기계 1대가 의자 8개를 만드는 데 걸리는 시간은 몇 시간일까요?`,
+    choices: ["1시간","2시간","3시간","4시간"],
+    correctIndex: 1 // 2시간
+  },
+  {
+    question: `똑같은 기계 3대가 2시간에 케이크 24개를 만든다면,<br>
+               기계 1대가 케이크 8개를 만드는 데 걸리는 시간은 몇 시간일까요?`,
+    choices: ["1시간","1.5시간","2시간","3시간"],
+    correctIndex: 2 // 2시간
+  },
+  {
+    question: `똑같은 기계 4대가 2시간에 마스크 40장을 만든다면,<br>
+               기계 1대가 마스크 20장을 만드는 데 걸리는 시간은 몇 시간일까요?`,
+    choices: ["2시간","3시간","4시간","5시간"],
+    correctIndex: 2 // 4시간
+  },
+  {
+    question: `똑같은 기계 2대가 3시간에 볼펜 18자루를 만든다면,<br>
+               기계 1대가 볼펜 6자루를 만드는 데 걸리는 시간은 몇 시간일까요?`,
+    choices: ["1시간","2시간","3시간","4시간"],
+    correctIndex: 1 // 2시간
+  },
+  {
+    question: `똑같은 기계 5대가 2시간에 컵 40개를 만든다면,<br>
+               기계 1대가 컵 20개를 만드는 데 걸리는 시간은 몇 시간일까요?`,
+    choices: ["4시간","5시간","6시간","8시간"],
+    correctIndex: 1 // 5시간
+  },
+  {
+    question: `똑같은 기계 6대가 2시간에 과자 60봉지를 만든다면,<br>
+               기계 3대가 과자 30봉지를 만드는 데 걸리는 시간은 몇 시간일까요?`,
+    choices: ["1시간","2시간","3시간","4시간"],
+    correctIndex: 1 // 2시간
+  }
+];
+
+// 3) 세 번째 유형(어떤 수 나누기: 4지선다) - 10문제 전부
+const cat3 = [
+  {
+    question: `어떤 수를 4로 나누었더니 몫이 5였습니다.<br>
+               이 수를 2로 나누면 몫은 얼마일까요?`,
+    choices: ["8","9","10","12"],
+    correctIndex: 2 // 10
+  },
+  {
+    question: `어떤 수를 5로 나누었더니 몫이 6이었습니다.<br>
+               이 수를 3으로 나누면 몫은 얼마일까요?`,
+    choices: ["6","9","10","12"],
+    correctIndex: 2 // 10
+  },
+  {
+    question: `어떤 수를 6으로 나누었더니 몫이 7이었습니다.<br>
+               이 수를 2로 나누면 몫은 얼마일까요?`,
+    choices: ["14","18","21","24"],
+    correctIndex: 2 // 21
+  },
+  {
+    question: `어떤 수를 8로 나누었더니 몫이 5였습니다.<br>
+               이 수를 4로 나누면 몫은 얼마일까요?`,
+    choices: ["8","10","12","14"],
+    correctIndex: 1 // 10
+  },
+  {
+    question: `어떤 수를 2로 나누었더니 몫이 9였습니다.<br>
+               이 수를 3으로 나누면 몫은 얼마일까요?`,
+    choices: ["3","6","9","12"],
+    correctIndex: 1 // 6
+  },
+  {
+    question: `어떤 수를 7로 나누었더니 몫이 4였습니다.<br>
+               이 수를 14로 나누면 몫은 얼마일까요?`,
+    choices: ["1","2","4","7"],
+    correctIndex: 1 // 2
+  },
+  {
+    question: `어떤 수를 9로 나누었더니 몫이 8이었습니다.<br>
+               이 수를 3으로 나누면 몫은 얼마일까요?`,
+    choices: ["8","16","24","27"],
+    correctIndex: 2 // 24
+  },
+  {
+    question: `어떤 수를 4로 나누었더니 몫이 7이었습니다.<br>
+               이 수를 14로 나누면 몫은 얼마일까요?`,
+    choices: ["2","3","4","7"],
+    correctIndex: 0 // 2
+  },
+  {
+    question: `어떤 수를 5로 나누었더니 몫이 3이었습니다.<br>
+               이 수를 15로 나누면 몫은 얼마일까요?`,
+    choices: ["0","1","2","3"],
+    correctIndex: 1 // 1
+  },
+  {
+    question: `어떤 수를 12로 나누었더니 몫이 3이었습니다.<br>
+               이 수를 6으로 나누면 몫은 얼마일까요?`,
+    choices: ["4","5","6","8"],
+    correctIndex: 2 // 6
+  }
+];
+
+// 4) 네 번째 유형(동물 다리수: 4지선다) - 10문제 전부
+const cat4 = [
+  {
+    question: `어느 농장에 오리 10마리, 돼지 5마리가 있습니다.<br>
+               오리는 다리가 2개, 돼지는 4개라면 전체 다리는 몇 개일까요?`,
+    choices: ["30","36","40","45"],
+    correctIndex: 2 // 40
+  },
+  {
+    question: `어느 농장에 오리 12마리, 돼지 8마리가 있습니다.<br>
+               오리는 다리가 2개, 돼지는 4개라면 전체 다리는 몇 개일까요?`,
+    choices: ["48","52","56","60"],
+    correctIndex: 2 // 56
+  },
+  {
+    question: `어느 농장에 오리 20마리, 돼지 1마리가 있습니다.<br>
+               전체 다리는 몇 개일까요? (오리 2다리, 돼지 4다리)`,
+    choices: ["40","42","44","48"],
+    correctIndex: 2 // 44
+  },
+  {
+    question: `거위 5마리, 돼지 5마리가 있습니다.<br>
+               (거위 2다리, 돼지 4다리) 전체 다리는 몇 개일까요?`,
+    choices: ["20","25","28","30"],
+    correctIndex: 3 // 30
+  },
+  {
+    question: `오리 6마리, 돼지 11마리가 있습니다.<br>
+               전체 다리는 몇 개일까요? (오리 2, 돼지 4)`,
+    choices: ["44","48","52","56"],
+    correctIndex: 3 // 56
+  },
+  {
+    question: `거위 10마리, 양 3마리가 있습니다.<br>
+               (거위는 2다리, 양은 4다리) 전체 다리는 몇 개일까요?`,
+    choices: ["20","24","28","32"],
+    correctIndex: 3 // 32
+  },
+  {
+    question: `오리 1마리, 돼지 1마리가 있습니다.<br>
+               전체 다리는 몇 개일까요? (오리 2, 돼지 4)`,
+    choices: ["4","6","8","10"],
+    correctIndex: 1 // 6
+  },
+  {
+    question: `거위 8마리, 돼지 8마리가 있습니다.<br>
+               전체 다리는 몇 개일까요? (거위 2, 돼지 4)`,
+    choices: ["40","44","48","52"],
+    correctIndex: 2 // 48
+  },
+  {
+    question: `오리 15마리, 돼지 15마리가 있습니다.<br>
+               전체 다리는 몇 개일까요? (오리 2, 돼지 4)`,
+    choices: ["60","72","80","90"],
+    correctIndex: 3 // 90
+  },
+  {
+    question: `오리 25마리, 돼지 10마리가 있습니다.<br>
+               전체 다리는 몇 개일까요?`,
+    choices: ["70","80","90","100"],
+    correctIndex: 2 // 90
+  }
+];
+
+// 최종 문제 풀(pool) 합치기
+let allQuestions = [...cat1, ...cat2, ...cat3, ...cat4];
+
+// =============================================
+// 2. 유틸 함수(셔플 등)
+// =============================================
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+}
+
+// 문제 집합을 섞어 놓기(한 번 섞어두고 필요할 때 순회)
+shuffleArray(allQuestions);
+
+// =============================================
+// 3. 게임 진행 관련 전역 변수
+// =============================================
+let playerName = "";
+let difficulty = "low"; // 난이도 (기본값: 하)
+let timePerQuestion = 0; // 문제당 제한시간
+let scorePerCorrect = 0; // 정답 시 획득점수
+let score = 0;           // 누적 점수
+let lives = 3;          // 기회(오답 가능 횟수)
+let currentQuestion = null; // 현재 문제 객체
+let currentAnswerIndex = null; // 사용자가 선택한 보기
+let questionIndex = 0;  // 현재 문제 배열 인덱스 (무작위 순회용)
+let timeLeft = 0;       // 문제 제한시간 카운트
+let timerId = null;     // setInterval ID
+let totalGameTime = 0;  // 전체 흐른 시간(초)
+let totalTimerId = null;// 전체 시간 setInterval
+
+// 백업용: 문제 집합을 복제해두고, 소진 시 다시 채우는 식으로
+let questionPool = [...allQuestions];
+
+// =============================================
+// 4. 난이도별 초기값 설정
+// =============================================
+function setDifficulty(diff) {
+  switch(diff) {
+    case "highest":
+      timePerQuestion = 20; // 초
+      scorePerCorrect = 20;
+      break;
+    case "high":
+      timePerQuestion = 30;
+      scorePerCorrect = 15;
+      break;
+    case "mid":
+      timePerQuestion = 40;
+      scorePerCorrect = 13;
+      break;
+    case "low":
+    default:
+      timePerQuestion = 0;  // 무제한
+      scorePerCorrect = 10;
+      break;
+  }
+}
+
+// =============================================
+// 5. 게임 시작
+// =============================================
+function startGame() {
+  playerName = document.getElementById("playerName").value.trim();
+  if (!playerName) {
+    alert("이름을 입력하세요!");
+    return;
+  }
+  difficulty = document.getElementById("difficultySelect").value;
+  setDifficulty(difficulty);
+
+  document.getElementById("startScreen").classList.add("hidden");
+  document.getElementById("gameScreen").classList.remove("hidden");
+
+  // 남은 기회 초기화
+  lives = 3;
+  score = 0;
+  questionIndex = 0;
+  totalGameTime = 0;
+  document.getElementById("chanceDisplay").innerText = "남은 기회: " + lives;
+  document.getElementById("scoreDisplay").innerText = "점수: " + score;
+
+  // 전체 시간 측정 타이머
+  totalTimerId = setInterval(() => {
+    totalGameTime++;
+    document.getElementById("totalTime").innerText = totalGameTime;
+  }, 1000);
+
+  // 문제 풀(37문제) 다시 셔플하여 준비
+  questionPool = [...allQuestions];
+  shuffleArray(questionPool);
+
+  // 첫 문제 표시
+  nextQuestion();
+}
+
+// =============================================
+// 6. 다음 문제 가져오기
+//    - 풀을 다 소진하면(=모든 문제를 다 냈으면) 다시 랜덤 보충
+//    - 요청사항: "모든 문제 끝나면 끝없이 랜덤으로 내주기"
+// =============================================
+function nextQuestion() {
+  if (lives <= 0) {
+    endGame();
+    return;
+  }
+
+  // 문제풀 소진 시 다시 채우고 셔플
+  if (questionPool.length === 0) {
+    questionPool = [...allQuestions];
+    shuffleArray(questionPool);
+  }
+
+  currentQuestion = questionPool.pop(); // 하나 꺼냄
+  currentAnswerIndex = null;
+
+  displayQuestion(currentQuestion);
+
+  // 시간 제한 초기화
+  if (timePerQuestion > 0) {
+    timeLeft = timePerQuestion;
+    updateEnergyBar();
+    clearInterval(timerId);
+    timerId = setInterval(() => {
+      timeLeft--;
+      updateEnergyBar();
+      if (timeLeft <= 0) {
+        // 시간 초과 -> 자동 오답 처리
+        clearInterval(timerId);
+        loseLifeAndShowAnswer(false);
+      }
+    }, 1000);
+  } else {
+    // 하 난이도(무제한)
+    document.getElementById("energyFill").style.width = "100%";
+  }
+}
+
+// =============================================
+// 7. 문제 표시
+// =============================================
+function displayQuestion(qObj) {
+  const qTextDiv = document.getElementById("questionText");
+  const cDiv = document.getElementById("choices");
+
+  // 문제 텍스트
+  qTextDiv.innerHTML = qObj.question;
+
+  // 보기 구성
+  cDiv.innerHTML = "";
+  // 보기들은 shuffle 해도 되지만, 문제 자체가 이미 distractor 포함
+  // 여기서는 보기 배열 자체는 그대로 두고, 라디오 버튼만 출력
+  qObj.choices.forEach((choice, idx) => {
+    const choiceContainer = document.createElement("div");
+    choiceContainer.className = "choice-container";
+    const rb = document.createElement("input");
+    rb.type = "radio";
+    rb.name = "choices";
+    rb.value = idx.toString();
+    rb.id = "choice_" + idx;
+    rb.onclick = () => {
+      currentAnswerIndex = idx;
+    };
+    const label = document.createElement("label");
+    label.htmlFor = rb.id;
+    // 여기에 수식 있을 수 있으니 span에 넣고 MathJax.typeset() 이후 렌더
+    label.innerHTML = choice;
+    choiceContainer.appendChild(rb);
+    choiceContainer.appendChild(label);
+    cDiv.appendChild(choiceContainer);
+  });
+
+  // MathJax 수식 렌더링
+  MathJax.typeset();
+}
+
+// =============================================
+// 8. 에너지바 업데이트
+// =============================================
+function updateEnergyBar() {
+  const bar = document.getElementById("energyFill");
+  if (timePerQuestion > 0) {
+    const ratio = (timeLeft / timePerQuestion) * 100;
+    bar.style.width = ratio + "%";
+  } else {
+    // 하 난이도(무제한)
+    bar.style.width = "100%";
+  }
+}
+
+// =============================================
+// 9. 정답 제출
+// =============================================
+function submitAnswer() {
+  if (currentAnswerIndex === null) {
+    alert("답안을 선택해주세요!");
+    return;
+  }
+  clearInterval(timerId); // 남은 시간 카운트 중지
+
+  const isCorrect = (currentAnswerIndex === currentQuestion.correctIndex);
+
+  if (isCorrect) {
+    // 정답 처리
+    score += scorePerCorrect;
+    document.getElementById("scoreDisplay").innerText = "점수: " + score;
+    // 다음 문제로
+    nextQuestion();
+  } else {
+    // 오답 처리
+    loseLifeAndShowAnswer(true);
+  }
+}
+
+// =============================================
+// 10. 오답 시 기회 차감, 정답 표시
+// =============================================
+function loseLifeAndShowAnswer(userClicked) {
+  lives--;
+  document.getElementById("chanceDisplay").innerText = "남은 기회: " + lives;
+
+  // 정답 공개
+  const correctChoice =
+    currentQuestion.choices[currentQuestion.correctIndex];
+  if (userClicked) {
+    alert("오답입니다! 정답: " + correctChoice);
+  } else {
+    // 시간초과
+    alert("시간 초과! 정답: " + correctChoice);
+  }
+
+  if (lives <= 0) {
+    endGame();
+  } else {
+    nextQuestion();
+  }
+}
+
+// =============================================
+// 11. 게임 종료
+// =============================================
+function endGame() {
+  clearInterval(timerId);
+  clearInterval(totalTimerId);
+
+  document.getElementById("gameScreen").classList.add("hidden");
+  document.getElementById("endScreen").classList.remove("hidden");
+
+  document.getElementById("finalScore").innerText =
+    `최종 점수: ${score}, 걸린 시간: ${totalGameTime}초`;
+}
+
+// =============================================
+// 12. 점수 전송
+//    (제공해주신 코드에 맞춰 함수 작성)
+// =============================================
+function sendScore() {
+  saveData(
+    "나눗셈 문장제(다리수, 생산속도, 역연산)",
+    playerName,
+    score,
+    totalGameTime
+  );
+}
+
+// =============================================
+// 13. 데이터 서버 전송 함수
+//    (요청사항에 맞춰 그대로 삽입)
+// =============================================
+async function saveData(game, name, score, elapsedTime) {
+  const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+  const requestData = {
+    game,
+    name,
+    score: parseInt(score, 10),
+    elapsedTime: parseInt(elapsedTime, 10)
+  };
+
+  try {
+    const response = await fetch(FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestData)
+    });
+
+    const responseData = await response.json();
+
+    if (response.ok) {
+      document.getElementById('response').innerText =
+        `성공: ${JSON.stringify(responseData, null, 2)}`;
+    } else {
+      document.getElementById('response').innerText =
+        `오류: ${JSON.stringify(responseData, null, 2)}`;
+    }
+  } catch (error) {
+    console.error('요청 실패:', error);
+    document.getElementById('response').innerText =
+      `네트워크 오류: ${error.message}`;
+  }
+}
+</script>
+
+</body>
+</html>
